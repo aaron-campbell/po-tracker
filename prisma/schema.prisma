@@ -1,0 +1,118 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+
+model User {
+  id        String   @id @default(uuid())
+  username  String   @unique
+  password  String
+  fullName  String
+  role      String   @default("user") // "admin" or "user"
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Client {
+  id             String          @id @default(uuid())
+  name           String          @unique
+  legalEntity    String?
+  country        String?
+  invoiceEmail   String?
+  notes          String?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  purchaseOrders PurchaseOrder[]
+}
+
+model PurchaseOrder {
+  id                 String        @id @default(uuid())
+  poNumber           String        @unique
+  clientId           String
+  client             Client        @relation(fields: [clientId], references: [id])
+  orderDate          DateTime
+  currency           String        @default("USD")
+  totalValue         Float
+  paymentTerms       String?
+  contractReference  String?
+  rigSiteName        String?
+  deliveryAddress    String?
+  invoiceAddress     String?
+  buyerContactName   String?
+  buyerContactEmail  String?
+  revenueType        String?       // SaaS, Deployment, Hypercare, Development, Training, Other
+  status             String        @default("Open") // Open, Revised, 90% Used, Exceeded, Closed
+  revisionNumber     Int           @default(0)
+  notes              String?
+  pdfPath            String?
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+  lineItems          POLineItem[]
+  revisions          PORevision[]
+  invoices           Invoice[]
+}
+
+model POLineItem {
+  id              String        @id @default(uuid())
+  purchaseOrderId String
+  purchaseOrder   PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  lineNumber      Int
+  description     String
+  quantity        Float         @default(1)
+  unitOfMeasure   String?
+  unitPrice       Float
+  netAmount       Float
+  deliveryDate    DateTime?
+  createdAt       DateTime      @default(now())
+}
+
+model PORevision {
+  id              String        @id @default(uuid())
+  purchaseOrderId String
+  purchaseOrder   PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  revisionNumber  Int
+  previousValue   Float
+  newValue        Float
+  changeNotes     String?
+  pdfPath         String?
+  createdAt       DateTime      @default(now())
+}
+
+model Invoice {
+  id              String             @id @default(uuid())
+  invoiceNumber   String             @unique
+  purchaseOrderId String
+  purchaseOrder   PurchaseOrder      @relation(fields: [purchaseOrderId], references: [id])
+  invoiceDate     DateTime
+  dueDate         DateTime
+  currency        String             @default("USD")
+  subtotal        Float
+  taxAmount       Float              @default(0)
+  totalAmount     Float
+  paymentStatus   String             @default("Sent") // Sent, Received, Overdue, Paid
+  paymentDate     DateTime?
+  ourReference    String?
+  customerOrderNo String?
+  notes           String?
+  pdfPath         String?
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+  lineItems       InvoiceLineItem[]
+}
+
+model InvoiceLineItem {
+  id          String   @id @default(uuid())
+  invoiceId   String
+  invoice     Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  description String
+  quantity    Float    @default(1)
+  unitPrice   Float
+  taxPercent  Float    @default(0)
+  amount      Float
+  createdAt   DateTime @default(now())
+}
