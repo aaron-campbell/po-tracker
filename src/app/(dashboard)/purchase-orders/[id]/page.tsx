@@ -20,6 +20,7 @@ interface PODetail {
   status: string;
   revisionNumber: number;
   notes: string | null;
+  pdfPath: string | null;
   invoicedAmount: number;
   remainingBalance: number;
   consumedPercent: number;
@@ -208,6 +209,29 @@ export default function PODetailPage() {
               </div>
             ))}
           </div>
+        </div>
+      )}
+
+      {/* PDF Viewer */}
+      {po.pdfPath && (
+        <div className="bg-white rounded-xl shadow-sm border p-6">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-semibold text-gray-800">Purchase Order Document</h2>
+            <a
+              href={`/api/slack-pdf?url=${encodeURIComponent(po.pdfPath)}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="px-4 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 text-gray-700"
+            >
+              Open in new tab
+            </a>
+          </div>
+          <iframe
+            src={`/api/slack-pdf?url=${encodeURIComponent(po.pdfPath)}`}
+            className="w-full rounded-lg border border-gray-200"
+            style={{ height: "700px" }}
+            title="Purchase Order PDF"
+          />
         </div>
       )}
 
