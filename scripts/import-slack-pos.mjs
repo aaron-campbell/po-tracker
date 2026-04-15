@@ -74,8 +74,8 @@ function extractField(text, ...labels) {
 
 function parseCurrency(raw) {
   if (!raw) return null;
-  // Strip currency symbols and labels
-  let s = raw.replace(/USD|NOK|EUR|GBP/gi, "").replace(/[$£€]/g, "").trim();
+  // Strip currency symbols, labels, and trailing punctuation
+  let s = raw.replace(/USD|NOK|EUR|GBP/gi, "").replace(/[$£€]/g, "").replace(/[.,\s]+$/, "").trim();
 
   // European format: digits with period as thousands separator (e.g. 250.975 or 168.000)
   // Detect: ends in exactly 3 decimal digits after a period, no comma
@@ -120,24 +120,60 @@ function inferRevenueType(text) {
   return null;
 }
 
+function extractPoNumber(text, files) {
+  // 1. Explicit labeled field in text
+  const labeled = extractField(text, "PO number", "PO#", "PO No", "Purchase Order Number");
+  if (labeled) return labeled.split(/\s/)[0]; // stop at first space
+
+  // 2. "Updated PO from X: NUMBER" or "see revised PO NUMBER"
+  let m = text.match(/(?:updated\s+po\s+from\s+\w+|revised\s+po)[:\s]+([A-Z0-9\-]{5,})/i);
+  if (m) return m[1];
+
+  // 3. "PO NUMBER" standalone reference (8+ digit number after "PO ")
+  m = text.match(/\bPO\s+([0-9]{7,})\b/);
+  if (m) return m[1];
+
+  // 4. Filename: starts with digits "300186528 Valiant.pdf"
+  for (const f of files || []) {
+    const name = f.name;
+    // Starts with number
+    let fm = name.match(/^(\d{6,})/);
+    if (fm) return fm[1];
+    // PO followed immediately by number: "PO4504594019 ..."
+    fm = name.match(/^PO[_ -]?(\d{6,})/i);
+    if (fm) return fm[1];
+    // PO_ALPHA+NUM: "PO_BMA61401000421_..."
+    fm = name.match(/PO[_-]([A-Z]{1,4}\d{6,})[_-]/i);
+    if (fm) return fm[1];
+    // PO-NNNN: "PO-4900069335_v1..."
+    fm = name.match(/PO[-_](\d{7,})/i);
+    if (fm) return fm[1];
+    // "PO 4504196421 H56.pdf"
+    fm = name.match(/^PO\s+(\d{6,})/i);
+    if (fm) return fm[1];
+  }
+
+  return null;
+}
+
 function inferClientName(text) {
-  // "New PO received from CLIENT:" or "New PO received from CLIENT\n"
-  let m = text.match(/(?:new\s+)?po\s+received\s+from\s+([A-Za-z0-9 &.\-]+?)(?::|\.|\n|$)/i);
-  if (m) return m[1].trim();
+  const KNOWN = /^(BP|Equinor|Seadrill|Valaris|Noble|Transocean|SLB|Harbour|TotalEnergies|OMV)/i;
+
+  // "New/Updated PO received from CLIENT:" — stop at known stopwords
+  let m = text.match(/(?:new|updated)?\s*po\s+received\s+from\s+([\w&.\- ]+?)(?:\s+that\b|\s+for\b|[:\n]|$)/i);
+  if (m && KNOWN.test(m[1].trim())) return m[1].trim();
 
   // "Purchase order from CLIENT"
-  m = text.match(/purchase\s+order\s+from\s+([A-Za-z0-9 &.\-]+?)(?:\.|\n|for |$)/i);
-  if (m) return m[1].trim();
+  m = text.match(/purchase\s+order\s+from\s+([\w&.\- ]+?)(?:\s+for\b|[.\n]|$)/i);
+  if (m && KNOWN.test(m[1].trim())) return m[1].trim();
 
-  // "PO from CLIENT"
-  m = text.match(/\bpo\s+from\s+([A-Za-z0-9 &.\-]+?)(?:\.|\n|for |$)/i);
-  if (m) return m[1].trim();
+  // "PO from CLIENT" / "Updated PO from CLIENT:"
+  m = text.match(/\bpo\s+from\s+([\w&.\- ]+?)(?:\s+for\b|[.:\n]|$)/i);
+  if (m && KNOWN.test(m[1].trim())) return m[1].trim();
 
-  // Lines that look like a company name header (all caps or title case, no verb)
+  // Company name header on first line
   const firstLine = text.split("\n")[0].trim();
-  if (/^(BP|Equinor|Seadrill|Valaris|Noble|Transocean|SLB|Harbour|TotalEnergies|OMV)/i.test(firstLine)) {
-    return firstLine;
-  }
+  if (KNOWN.test(firstLine)) return firstLine;
 
   return null;
 }
@@ -170,12 +206,7 @@ function parseMessage(msg) {
   if (/quote|proposal|letter agreement|commitment/i.test(text) &&
       !/\bpo\b|\bpurchase order\b/i.test(text)) return null;
 
-  const poNumber =
-    extractField(text, "PO number", "PO#", "PO No", "Purchase Order Number") ||
-    // Try extracting from filename: e.g. "300186528 Valiant Noble.pdf"
-    msg.files?.map((f) => f.name.match(/^(\d{6,})/)?.[1]).find(Boolean) ||
-    null;
-
+  const poNumber = extractPoNumber(text, msg.files);
   if (!poNumber) return null;
 
   const rawValue = extractField(text, "PO value", "PO Value", "value");
@@ -225,6 +256,19 @@ function fmt(n) {
 
 // ── Main ───────────────────────────────────────────────────────────────────
 
+async function backfillPdfPaths(parsed, existingSet) {
+  const candidates = parsed.filter((p) => existingSet.has(p.poNumber) && p.pdfUrl);
+  if (candidates.length === 0) return;
+  console.log(`\nBackfilling PDF URLs for ${candidates.length} existing POs...`);
+  for (const p of candidates) {
+    const record = await prisma.purchaseOrder.findUnique({ where: { poNumber: p.poNumber }, select: { id: true, pdfPath: true } });
+    if (record && !record.pdfPath) {
+      await prisma.purchaseOrder.update({ where: { id: record.id }, data: { pdfPath: p.pdfUrl } });
+      console.log(`  ✓ ${p.poNumber}`);
+    }
+  }
+}
+
 async function main() {
   if (!SLACK_TOKEN) {
     console.error("Error: SLACK_TOKEN not set. Add it to your .env file.");
@@ -267,6 +311,7 @@ async function main() {
 
   if (toImport.length === 0) {
     console.log("Nothing new to import.");
+    await backfillPdfPaths(unique, existingSet);
     process.exit(0);
   }
 
@@ -319,19 +364,7 @@ async function main() {
   }
 
   console.log(`\nDone. ${created} imported, ${errors} errors, ${skipped.length} skipped (already existed).`);
-
-  // Backfill pdfPath on existing POs that are missing it
-  const backfillCandidates = unique.filter((p) => existingSet.has(p.poNumber) && p.pdfUrl);
-  if (backfillCandidates.length > 0) {
-    console.log(`\nBackfilling PDF URLs for ${backfillCandidates.length} existing POs...`);
-    for (const p of backfillCandidates) {
-      const existing = await prisma.purchaseOrder.findUnique({ where: { poNumber: p.poNumber }, select: { id: true, pdfPath: true } });
-      if (existing && !existing.pdfPath) {
-        await prisma.purchaseOrder.update({ where: { id: existing.id }, data: { pdfPath: p.pdfUrl } });
-        console.log(`  ✓ ${p.poNumber}`);
-      }
-    }
-  }
+  await backfillPdfPaths(unique, existingSet);
 }
 
 main()

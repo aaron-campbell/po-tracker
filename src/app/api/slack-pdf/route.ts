@@ -20,9 +20,18 @@ export async function GET(request: NextRequest) {
       return new Response("Slack token not configured", { status: 500 });
     }
 
-    const res = await fetch(url, {
+    // Slack file URLs may redirect — follow manually so the auth header
+    // is sent on the first request and dropped on cross-origin redirects.
+    let res = await fetch(url, {
       headers: { Authorization: `Bearer ${slackToken}` },
+      redirect: "manual",
     });
+
+    if (res.status === 301 || res.status === 302 || res.status === 307 || res.status === 308) {
+      const location = res.headers.get("location");
+      if (!location) return new Response("Redirect with no location", { status: 502 });
+      res = await fetch(location);
+    }
 
     if (!res.ok) {
       return new Response("Failed to fetch PDF from Slack", { status: res.status });
