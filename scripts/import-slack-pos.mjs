@@ -227,8 +227,7 @@ function parseMessage(msg) {
     inferRevenueType(text);
   const revenueType = normaliseRevenueType(rawRevenueType);
 
-  const rig = extractField(text, "Rig") || null;
-  const notes = rig ? `Rig: ${rig}` : null;
+  const rigSiteName = extractField(text, "Rig") || null;
 
   const pdfUrl = msg.files?.find((f) => f.filetype === "pdf")?.url_private || null;
 
@@ -238,7 +237,7 @@ function parseMessage(msg) {
     totalValue,
     orderDate,
     revenueType: revenueType ? revenueType.trim() : null,
-    notes,
+    rigSiteName,
     pdfUrl,
     slackTs: msg.ts,
     rawText: text.substring(0, 200),
@@ -257,14 +256,18 @@ function fmt(n) {
 // ── Main ───────────────────────────────────────────────────────────────────
 
 async function backfillPdfPaths(parsed, existingSet) {
-  const candidates = parsed.filter((p) => existingSet.has(p.poNumber) && p.pdfUrl);
+  const candidates = parsed.filter((p) => existingSet.has(p.poNumber) && (p.pdfUrl || p.rigSiteName));
   if (candidates.length === 0) return;
-  console.log(`\nBackfilling PDF URLs for ${candidates.length} existing POs...`);
+  console.log(`\nBackfilling existing POs...`);
   for (const p of candidates) {
-    const record = await prisma.purchaseOrder.findUnique({ where: { poNumber: p.poNumber }, select: { id: true, pdfPath: true } });
-    if (record && !record.pdfPath) {
-      await prisma.purchaseOrder.update({ where: { id: record.id }, data: { pdfPath: p.pdfUrl } });
-      console.log(`  ✓ ${p.poNumber}`);
+    const record = await prisma.purchaseOrder.findUnique({ where: { poNumber: p.poNumber }, select: { id: true, pdfPath: true, rigSiteName: true } });
+    if (!record) continue;
+    const update = {};
+    if (p.pdfUrl && !record.pdfPath) update.pdfPath = p.pdfUrl;
+    if (p.rigSiteName && !record.rigSiteName) update.rigSiteName = p.rigSiteName;
+    if (Object.keys(update).length > 0) {
+      await prisma.purchaseOrder.update({ where: { id: record.id }, data: update });
+      console.log(`  ✓ ${p.poNumber} — ${Object.keys(update).join(", ")}`);
     }
   }
 }
@@ -348,7 +351,7 @@ async function main() {
           orderDate: p.orderDate,
           totalValue: p.totalValue,
           revenueType: p.revenueType,
-          notes: p.notes,
+          rigSiteName: p.rigSiteName,
           pdfPath: p.pdfUrl,
           status: "Open",
           currency: "USD",
