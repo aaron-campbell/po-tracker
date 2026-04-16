@@ -2,6 +2,7 @@
 
 import { useEffect, useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import PdfUploadField from "@/components/PdfUploadField";
 
 interface Client { id: string; name: string; }
 interface LineItem { description: string; quantity: string; unitOfMeasure: string; unitPrice: string; netAmount: string; deliveryDate: string; }
@@ -23,6 +24,9 @@ function NewPurchaseOrderForm() {
   const [selectedClientId, setSelectedClientId] = useState(searchParams.get("clientId") || "");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [pdfUrl, setPdfUrl] = useState<string | null>(null);
+  const [newClientName, setNewClientName] = useState("");
+  const [addingClient, setAddingClient] = useState(false);
   const [lineItems, setLineItems] = useState<LineItem[]>([
     { description: "", quantity: "1", unitOfMeasure: "", unitPrice: "", netAmount: "", deliveryDate: "" },
   ]);
@@ -51,10 +55,37 @@ function NewPurchaseOrderForm() {
     setLineItems(updated);
   }
 
+  async function handleCreateClient() {
+    if (!newClientName.trim()) return;
+    setAddingClient(true);
+    try {
+      const res = await fetch("/api/clients", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: newClientName.trim() }),
+      });
+      const d = await res.json();
+      if (!res.ok) throw new Error(d.error || "Failed to create client");
+      setClients((prev) => [...prev, d.client].sort((a, b) => a.name.localeCompare(b.name)));
+      setSelectedClientId(d.client.id);
+      setNewClientName("");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to create client");
+    } finally {
+      setAddingClient(false);
+    }
+  }
+
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setSaving(true);
     setError("");
+
+    if (!selectedClientId || selectedClientId === "__new__") {
+      setError("Please select or create a client");
+      setSaving(false);
+      return;
+    }
 
     const formData = new FormData(e.currentTarget);
     const validLineItems = lineItems.filter((li) => li.description && li.netAmount);
@@ -65,7 +96,7 @@ function NewPurchaseOrderForm() {
 
     const data = {
       poNumber: formData.get("poNumber"),
-      clientId: formData.get("clientId"),
+      clientId: selectedClientId,
       orderDate: formData.get("orderDate"),
       currency: formData.get("currency") || "USD",
       totalValue,
@@ -76,6 +107,7 @@ function NewPurchaseOrderForm() {
       buyerContactName: formData.get("buyerContactName"),
       buyerContactEmail: formData.get("buyerContactEmail"),
       notes: formData.get("notes"),
+      pdfPath: pdfUrl,
       lineItems: validLineItems.map((li, idx) => ({
         lineNumber: idx + 1,
         description: li.description,
@@ -121,10 +153,25 @@ function NewPurchaseOrderForm() {
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Client *</label>
-              <select name="clientId" required value={selectedClientId} onChange={(e) => setSelectedClientId(e.target.value)} className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-gray-900">
+              <select required value={selectedClientId} onChange={(e) => setSelectedClientId(e.target.value)} className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-gray-900">
                 <option value="">Select client...</option>
                 {clients.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                <option value="__new__">+ Add new client...</option>
               </select>
+              {selectedClientId === "__new__" && (
+                <div className="flex gap-2 mt-2">
+                  <input
+                    value={newClientName}
+                    onChange={(e) => setNewClientName(e.target.value)}
+                    placeholder="New client name"
+                    className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900"
+                    onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleCreateClient(); } }}
+                  />
+                  <button type="button" onClick={handleCreateClient} disabled={addingClient || !newClientName.trim()} className="px-3 py-2 bg-orange-500 text-white rounded-lg text-sm hover:bg-orange-600 disabled:opacity-50">
+                    {addingClient ? "..." : "Create"}
+                  </button>
+                </div>
+              )}
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Order Date *</label>
@@ -176,6 +223,12 @@ function NewPurchaseOrderForm() {
             <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
             <textarea name="notes" rows={2} className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-gray-900" />
           </div>
+        </div>
+
+        {/* PDF Upload */}
+        <div className="bg-white rounded-xl shadow-sm border p-6 space-y-2">
+          <h2 className="text-lg font-semibold text-gray-800 mb-2">Purchase Order Document</h2>
+          <PdfUploadField onUpload={setPdfUrl} />
         </div>
 
         {/* Line Items */}

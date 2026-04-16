@@ -72,6 +72,7 @@ export async function POST(request: NextRequest) {
         ourReference: data.ourReference || null,
         customerOrderNo: data.customerOrderNo || po.poNumber,
         notes: data.notes || null,
+        pdfPath: data.pdfPath || null,
         lineItems: data.lineItems?.length > 0 ? {
           create: data.lineItems.map((item: { description: string; quantity?: number; unitPrice: number; taxPercent?: number; amount: number }) => ({
             description: item.description,

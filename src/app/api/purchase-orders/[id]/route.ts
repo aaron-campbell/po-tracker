@@ -75,6 +75,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     if (data.status !== undefined) updateData.status = data.status;
     if (data.revenueType !== undefined) updateData.revenueType = data.revenueType || null;
     if (data.notes !== undefined) updateData.notes = data.notes || null;
+    if (data.pdfPath !== undefined) updateData.pdfPath = data.pdfPath || null;
 
     // If lineItems array is provided, replace all existing line items
     if (Array.isArray(data.lineItems)) {

@@ -2,6 +2,7 @@
 
 import { useEffect, useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import PdfUploadField from "@/components/PdfUploadField";
 
 interface PO { id: string; poNumber: string; client: { name: string }; totalValue: number; currency: string; }
 interface LineItem { description: string; quantity: string; unitPrice: string; taxPercent: string; amount: string; }
@@ -21,6 +22,7 @@ function NewInvoiceForm() {
   const [selectedPOId, setSelectedPOId] = useState(searchParams.get("purchaseOrderId") || "");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [pdfUrl, setPdfUrl] = useState<string | null>(null);
   const [lineItems, setLineItems] = useState<LineItem[]>([
     { description: "", quantity: "1", unitPrice: "", taxPercent: "0", amount: "" },
   ]);
@@ -70,6 +72,7 @@ function NewInvoiceForm() {
       paymentStatus: formData.get("paymentStatus") || "Sent",
       ourReference: formData.get("ourReference"),
       notes: formData.get("notes"),
+      pdfPath: pdfUrl,
       lineItems: validLineItems.map((li) => ({
         description: li.description,
         quantity: parseFloat(li.quantity) || 1,
@@ -151,6 +154,12 @@ function NewInvoiceForm() {
             <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
             <textarea name="notes" rows={2} className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-gray-900" />
           </div>
+        </div>
+
+        {/* PDF Upload */}
+        <div className="bg-white rounded-xl shadow-sm border p-6 space-y-2">
+          <h2 className="text-lg font-semibold text-gray-800 mb-2">Invoice Document</h2>
+          <PdfUploadField onUpload={setPdfUrl} />
         </div>
 
         {/* Line Items */}

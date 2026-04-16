@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
+import PdfUploadField from "@/components/PdfUploadField";
 
 interface PO { id: string; poNumber: string; client: { name: string }; }
 interface LineItem { description: string; quantity: string; unitPrice: string; taxPercent: string; amount: string; }
@@ -15,6 +16,7 @@ export default function EditInvoicePage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [selectedPOId, setSelectedPOId] = useState("");
+  const [pdfUrl, setPdfUrl] = useState<string | null>(null);
   const [lineItems, setLineItems] = useState<LineItem[]>([]);
 
   const [fields, setFields] = useState({
@@ -32,6 +34,7 @@ export default function EditInvoicePage() {
       const inv = invData.invoice;
       if (!inv) return;
       setSelectedPOId(inv.purchaseOrderId);
+      setPdfUrl(inv.pdfPath ?? null);
       setFields({
         invoiceNumber: inv.invoiceNumber,
         invoiceDate: inv.invoiceDate?.slice(0, 10) ?? "",
@@ -101,6 +104,7 @@ export default function EditInvoicePage() {
         paymentStatus: fields.paymentStatus,
         ourReference: fields.ourReference || null,
         notes: fields.notes || null,
+        pdfPath: pdfUrl,
         lineItems: validLineItems.map(li => ({
           description: li.description,
           quantity: parseFloat(li.quantity) || 1,
@@ -181,6 +185,12 @@ export default function EditInvoicePage() {
             <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
             <textarea value={fields.notes} onChange={e => setField("notes", e.target.value)} rows={2} className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-gray-900" />
           </div>
+        </div>
+
+        {/* PDF Upload */}
+        <div className="bg-white rounded-xl shadow-sm border p-6 space-y-2">
+          <h2 className="text-lg font-semibold text-gray-800 mb-2">Invoice Document</h2>
+          <PdfUploadField existingUrl={pdfUrl} onUpload={setPdfUrl} />
         </div>
 
         {/* Line Items */}

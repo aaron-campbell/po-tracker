@@ -19,6 +19,7 @@ interface InvoiceDetail {
   ourReference: string | null;
   customerOrderNo: string | null;
   notes: string | null;
+  pdfPath: string | null;
   purchaseOrder: { poNumber: string; totalValue: number; client: { name: string } };
   lineItems: Array<{ id: string; description: string; quantity: number; unitPrice: number; taxPercent: number; amount: number }>;
 }
@@ -117,6 +118,16 @@ export default function InvoiceDetailPage() {
         </dl>
         {invoice.notes && <div className="mt-4 text-sm"><span className="text-gray-500">Notes:</span> <span className="text-gray-700">{invoice.notes}</span></div>}
       </div>
+
+      {invoice.pdfPath && (
+        <div className="bg-white rounded-xl shadow-sm border p-6">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-semibold text-gray-800">Invoice Document</h2>
+            <a href={invoice.pdfPath} target="_blank" rel="noopener noreferrer" className="text-sm text-orange-600 hover:underline">Open in new tab</a>
+          </div>
+          <iframe src={invoice.pdfPath} className="w-full border rounded" style={{ height: "700px" }} />
+        </div>
+      )}
 
       {invoice.lineItems.length > 0 && (
         <div className="bg-white rounded-xl shadow-sm border p-6">

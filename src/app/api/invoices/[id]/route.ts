@@ -45,6 +45,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     if (data.paymentDate !== undefined) updateData.paymentDate = data.paymentDate ? new Date(data.paymentDate) : null;
     if (data.ourReference !== undefined) updateData.ourReference = data.ourReference || null;
     if (data.notes !== undefined) updateData.notes = data.notes || null;
+    if (data.pdfPath !== undefined) updateData.pdfPath = data.pdfPath || null;
 
     // Replace line items if provided
     if (Array.isArray(data.lineItems)) {

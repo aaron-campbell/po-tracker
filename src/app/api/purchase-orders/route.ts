@@ -64,6 +64,7 @@ export async function POST(request: NextRequest) {
         buyerContactEmail: data.buyerContactEmail || null,
         revenueType: data.revenueType || null,
         notes: data.notes || null,
+        pdfPath: data.pdfPath || null,
         lineItems: data.lineItems?.length > 0 ? {
           create: data.lineItems.map((item: { lineNumber: number; description: string; quantity?: number; unitOfMeasure?: string; unitPrice: number; netAmount: number; deliveryDate?: string }, idx: number) => ({
             lineNumber: item.lineNumber || idx + 1,
